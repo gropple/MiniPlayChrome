@@ -1,4 +1,3 @@
-
 // The content script. This runs on every page while the extension is active. Can't access Chrome API, need to send
 // messages to background.js for that.
 // Use chrome.extension.sendRequest to communicate with background.js
@@ -9,6 +8,11 @@ function checkPlayer() {
     setTimeout(checkPlayer, 2000);
 }
 
+function isPlaying() {
+    return $("#player-bar-play-pause")[0].title === "Pause";
+}
+
+
 function pauseOrResume() {
     $('#player-bar-play-pause').click()
 }
@@ -17,16 +21,32 @@ function clickFeelingLucky() {
     $('#iflFab').click();
 }
 
+function isThumbedUp() {
+    return $("[icon='sj:thumb-up-outline']")[0].title === "Undo thumb-up";
+}
+
+function isThumbedDown() {
+    return $("[icon='sj:thumb-down-outline']")[0].title === "Undo thumb-down";
+}
+
 function thumbsUp() {
     $("*[title='Thumb-up']").click();
+}
+
+function undoThumbsUp() {
+    $("*[title='Undo thumb-up']").click();
 }
 
 function thumbsDown() {
     $("*[title='Thumb-down']").click();
 }
 
+function undoThumbsDown() {
+    $("*[title='Undo thumb-down']").click();
+}
+
 function prevSong() {
-    $("#player-bar-rewind").click();
+        $("#player-bar-rewind").click();
 }
 
 function nextSong() {
@@ -34,53 +54,61 @@ function nextSong() {
 }
 
 // Globals are good right?  Let's have lots of globals.
-var lastSongTitle;
-var ws;
-var bp = "MUSIC:";
+var lastMsg;
+var webSocket;
+var UPDATE_INTERVAL = 500;
 
-function updateEverything() {
+function keepDetectingChanges() {
     try {
         var currentlyPlaying = document.getElementById("currently-playing-title");
-        var songTitle = currentlyPlaying.title;
-        var songArt = document.getElementById("playerBarArt").src;
-        // var artist = $(".currently-playing-details").innerText;
-        var artist = document.getElementsByClassName("currently-playing-details")[0].innerText;
-        // console.info(songArt);
-        // console.info(artist);
-        // var msg = JSON.stringify({"song_title_changed": songTitle});
 
-        var fullmsg = {
-            title: songTitle,
-            art: songArt,
-            artist: artist
-        };
-
-        console.info(fullmsg);
-
-        ws.send(JSON.stringify(fullmsg));
-    }
-    catch (e) {
-        console.warn(e);
-    }
-}
-
-function updateTitle() {
-    try {
-        var currentlyPlaying = document.getElementById("currently-playing-title");
         if (currentlyPlaying != null) {
+            var songArtElem = document.getElementById("playerBarArt");
+            var artistElem = document.getElementById("player-artist");
+            var albumElem = document.getElementById("player-album");
+
+            var songTitle = currentlyPlaying.title;
+            var songArt = "Unknown";
+            var artist = "Unknown";
+            var album = "Unknown";
+
+            if (songArtElem !== null) songArt = songArtElem.src;
+            if (artistElem !== null) artist = artistElem.innerText;
+            if (albumElem !== null) album = albumElem.innerText;
+
             var songTitle = currentlyPlaying.title;
 
-            if (lastSongTitle !== songTitle) {
-                lastSongTitle = songTitle;
-                updateEverything();
-            }
+            var fullmsg = {
+                playing: isPlaying(),
+                isThumbedUp: isThumbedUp(),
+                isThumbedDown: isThumbedDown(),
+                title: songTitle,
+                artist: artist,
+                album: album,
+                art: songArt
+
+            };
+            var stringified = JSON.stringify(fullmsg);
+
+            // This isn't guaranteed, as the enumeration order of JSON isn't defined, but is good enough to cut down on
+            // message sending
+            // Until we know for sure need the performance, probably better to spam these
+
+            // if (lastMsg !== stringified) {
+            //     lastMsg = stringified;
+                console.info(fullmsg);
+
+                if (webSocket) {
+                    webSocket.send(stringified);
+                }
+            // }
         }
     }
     catch (e) {
         console.warn(e);
     }
 
-    setTimeout(updateTitle, 1000);
+    setTimeout(keepDetectingChanges, UPDATE_INTERVAL);
 }
 
 
@@ -115,8 +143,8 @@ function tryConnect() {
         }
         else {
             innerWs.onopen = function () {
-                ws = innerWs;
-                updateEverything();
+                webSocket = innerWs;
+                // detectChanges();
                 // ws.send("hello");
 
                 innerWs.onclose = function (e) {
@@ -148,6 +176,12 @@ function tryConnect() {
                         case "thumbsDown":
                             thumbsDown();
                             break;
+                        case "undoThumbsUp":
+                            undoThumbsUp();
+                            break;
+                        case "undoThumbsDown":
+                            undoThumbsDown();
+                            break;
                         case "prev":
                             prevSong();
                             break;
@@ -166,7 +200,7 @@ function tryConnect() {
 
 function keepTryingToConnect() {
     console.info("Trying to connect to server");
-    ws = undefined;
+    webSocket = undefined;
     // tryingToConnect = true;
     tryConnect();
     // console.info(ws);
@@ -190,7 +224,7 @@ $(document).ready(function () {
         // var tryingToConnect = false;
 
         keepTryingToConnect();
-        updateTitle();
+        keepDetectingChanges();
 
 
         chrome.extension.sendRequest("Some Data");
