@@ -6,4 +6,4 @@ At the moment this is very much just-for-developers.  I'll get this cleaned up a
 * Clone this project
 * Load the extension in Chrome, following [these Google directions(https://developer.chrome.com/extensions/getstarted)  
 
-
+You'll also need the [the desktop widget](https://github.com/gropple/MiniPlayDesktop).
